@@ -7,6 +7,12 @@ typedef enum {
   POUPANCA = 3
 } TipoConta;
 
+typedef enum{
+  BANCO_OK = 0,
+  ERRO_ARGUMENTO_INVALIDO = 1,
+  ERRO_BANCO_FECHADO = 2
+} Resultado;
+
 typedef struct Movimentacao{
   long long valorCentavos;
   char operacao;
@@ -36,9 +42,14 @@ typedef struct Cliente {
   typedef struct {
     Cliente *clientes;
     int quantidadeClientes;
+    int proximoIdCliente;
     int proximoNumero;
     int aberto;
   } Banco;
 
   Banco *criarBanco(void);
+  void liberarBanco(Banco *banco);
+  Resultado abrirBanco(Banco *banco);
+  Cliente *cadastrarCliente(Banco *banco, const char *nome);
+  Cliente *buscarCliente(Banco *banco, int id);
 #endif
