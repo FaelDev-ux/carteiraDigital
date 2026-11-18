@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "meu_banco.h"
 
 static void limparTerminal(void) {
 #ifdef _WIN32 //# indica instrução para o pré-processador
@@ -9,18 +10,25 @@ static void limparTerminal(void) {
 #endif
 }
 
-static void mostrarMenu(void) {
-  puts("=== Carteira Digital ===");
-  puts("1 - Abrir o banco");
+static void mostrarMenu(int aberto) {
+  printf("=== Carteira Digital (%s) ===\n", aberto ? "ABERTO" : "FECHADO");
+  printf("1 - %s o banco\n", aberto ? "Fechar" : "Abrir");
   puts("2 - Histórico do banco");
   puts("3 - Efetuar sorteio");
   puts("'s' - Sair");
 }
 
 int main(void) {
+  Banco* banco = criarBanco();
+  if (banco == NULL) {
+    puts("Não foi possível criar o banco.");
+    return EXIT_FAILURE;
+  }
+
   while (1) {
+    int aberto = banco->aberto;
     limparTerminal();
-    mostrarMenu();
+    mostrarMenu(aberto);
     puts("Digite a opção:");
 
     char letra;
@@ -28,9 +36,21 @@ int main(void) {
       break;
     }
 
+    if (letra == 's') {
+      puts("Até logo!");
+      break;
+    }
+
     switch (letra) {
     case '1':
-      puts("Abertura do banco em breve.");
+      if (aberto) {
+        banco->aberto = 0;
+        puts("Banco fechado com sucesso.");
+      }
+      else {
+        puts(abrirBanco(banco) == BANCO_OK ? "Banco aberto com sucesso."
+          : "Não foi possível abrir o banco.");
+      }
       break;
     case '2':
       puts("Histórico do banco em breve.");
@@ -38,9 +58,6 @@ int main(void) {
     case '3':
       puts("Sorteio em breve.");
       break;
-    case 's':
-      puts("Até logo!");
-      return 0;
     default:
       puts("Opção inválida. Digite 1, 2, 3 ou s.");
       break;
@@ -61,5 +78,6 @@ int main(void) {
     }
   }
 
+  liberarBanco(banco);
   return 0;
 }
