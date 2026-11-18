@@ -1,4 +1,5 @@
 /carteira
+*.exe
 *.o
 *.db
 *.db-journal
