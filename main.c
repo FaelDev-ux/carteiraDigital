@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "meu_banco.h"
 
 static void limparTerminal(void) {
@@ -15,7 +16,49 @@ static void mostrarMenu(int aberto) {
   printf("1 - %s o banco\n", aberto ? "Fechar" : "Abrir");
   puts("2 - Histórico do banco");
   puts("3 - Efetuar sorteio");
+  puts("4 - Cadastrar cliente");
   puts("'s' - Sair");
+}
+
+static void descartarRestoDaLinha(void) {
+  int caractere;
+  do {
+    caractere = getchar();
+  } while (caractere != '\n' && caractere != EOF);
+}
+
+static void cadastrar(Banco *banco) {
+  const int capacidade = 100;
+  char *nome = malloc(capacidade);
+  if (nome == NULL) {
+    puts("Não foi possível alocar memória para o nome.");
+    return;
+  }
+
+  puts("Digite o nome do cliente:");
+  if (fgets(nome, capacidade, stdin) == NULL) {
+    free(nome);
+    return;
+  }
+
+  if (strchr(nome, '\n') == NULL) { //procura primeira ocorrencia numa string
+    int proximo = getchar();
+    if (proximo != '\n' && proximo != EOF) { // verifica se ainda sobrou parte do nome
+      descartarRestoDaLinha();
+      puts("O nome excede o limite do cadastro.");
+      free(nome);
+      return;
+    }
+  }
+
+  Cliente *cliente = nome[0] == '\n' ? NULL : cadastrarCliente(banco, nome);
+  free(nome);
+  if (cliente == NULL) {
+    puts("Não foi possível cadastrar o cliente.");
+    return;
+  }
+
+  printf("Cliente cadastrado. ID: %d\n", cliente->id);
 }
 
 int main(void) {
@@ -41,6 +84,8 @@ int main(void) {
       break;
     }
 
+    descartarRestoDaLinha();
+
     switch (letra) {
     case '1':
       if (aberto) {
@@ -58,17 +103,15 @@ int main(void) {
     case '3':
       puts("Sorteio em breve.");
       break;
+    case '4':
+      cadastrar(banco);
+      break;
     default:
-      puts("Opção inválida. Digite 1, 2, 3 ou s.");
+      puts("Opção inválida. Digite 1, 2, 3, 4 ou s.");
       break;
     }
 
-    int caractere;
-    do {
-      caractere = getchar();
-    } while (caractere != '\n' && caractere != EOF);
-
-    if (caractere == EOF) {
+    if (feof(stdin)) {
       break;
     }
 
