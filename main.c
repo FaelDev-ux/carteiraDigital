@@ -129,6 +129,31 @@ static int lerValor(long long* centavos) {
   return *centavos > 0; //retorna se foi positivo ou negativo
 }
 
+static void exibirDinheiro(long long centavos) {
+  printf("R$ %s%lld,%02lld", centavos < 0 ? "-" : "",
+    llabs(centavos / 100), llabs(centavos % 100));
+}
+
+static void mostrarExtrato(Banco* banco, const char* numero) {
+  const Movimentacao* movimento = consultarExtrato(banco, numero);
+  if (banco->ultimoResultado != BANCO_OK) {
+    puts(mensagemResultado(banco->ultimoResultado));
+    return;
+  }
+
+  puts("\n=== Extrato (últimas 5 transações) ===");
+  if (movimento == NULL) {
+    puts("Nenhuma movimentação.");
+    return;
+  }
+
+  for (int i = 0; i < 5 && movimento != NULL; i++) { //backend já retorna na ordem
+    exibirDinheiro(movimento->valorCentavos);
+    printf(" : %c\n", movimento->operacao);
+    movimento = movimento->proximo;
+  }
+}
+
 static int acessarConta(Banco* banco) {
   if (!banco->aberto) {
     puts("Abra o banco para acessar uma conta.");
@@ -159,12 +184,13 @@ static int acessarConta(Banco* banco) {
   printf("Cliente: %s%s", titular->nome, strchr(titular->nome, '\n') ? "" : "\n");
 
   while (!feof(stdin)) {
-    long long saldo = conta->saldoCentavos;
-    printf("\nSaldo: R$ %s%lld,%02lld\n", saldo < 0 ? "-" : "", llabs(saldo / 100), llabs(saldo % 100));
+    printf("\nSaldo: ");
+    exibirDinheiro(conta->saldoCentavos);
+    putchar('\n');
     if (clienteComCorrenteNegativa(titular)) {
       puts("Atenção: sua conta corrente está com saldo negativo.");
     }
-    puts("1 - Depositar\n2 - Sacar\n0 - Voltar");
+    puts("1 - Depositar\n2 - Sacar\n5 - Extrato\n0 - Voltar");
 
     char opcao;
     if (scanf(" %c", &opcao) != 1) {
@@ -173,6 +199,10 @@ static int acessarConta(Banco* banco) {
     descartarRestoDaLinha();
     if (opcao == '0') {
       break;
+    }
+    if (opcao == '5') {
+      mostrarExtrato(banco, numero);
+      continue;
     }
     if (opcao != '1' && opcao != '2') {
       puts("Opção inválida.");
