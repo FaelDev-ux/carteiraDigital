@@ -4,18 +4,17 @@
 #include <string.h>
 #include "meu_banco.h"
 
-/* SQL fica apenas neste módulo. Parâmetros são ligados com bind, não concatenados.
-   Ciclo de uma consulta: preparar -> preencher os ? -> executar -> finalizar.*/
-/* Executa SQL sem parâmetros, como CREATE TABLE, BEGIN e COMMIT. */
+// executa comandos sql diretos sem parâmetros (create table, begin, commit, rollback)
 int executarSql(sqlite3 *conexao, const char *sql) {
     return sqlite3_exec(conexao, sql, NULL, NULL, NULL) == SQLITE_OK;
 }
-/* Prepara SQL com ?; os valores serão preenchidos pelas chamadas bind.
-   O SQLite recebe &consulta para colocar ali o endereço da consulta preparada. */
+
+// prepara uma consulta sql com placeholders '?'
 int prepararConsulta(sqlite3 *conexao, const char *sql, sqlite3_stmt **consulta) {
     return sqlite3_prepare_v2(conexao, sql, -1, consulta, NULL) == SQLITE_OK;
 }
-/* Grava uma linha e deixa a consulta pronta para receber a próxima. */
+
+// executa uma linha da consulta preparada e reseta pra próxima
 int gravarRegistro(sqlite3_stmt *consulta) {
     int sucesso = sqlite3_step(consulta) == SQLITE_DONE;
     sqlite3_reset(consulta);
@@ -45,15 +44,14 @@ int lerConfiguracao(sqlite3 *conexao, const char *chave, long long padrao, long 
     return sucesso;
 }
 
-/* Em qualquer falha, fecha a consulta e desfaz a transação do SQLite. */
+// em caso de falha, fecha a consulta e desfaz a transação com rollback
 Resultado desfazerGravacao(sqlite3 *conexao, sqlite3_stmt *consulta) {
     sqlite3_finalize(consulta);
     executarSql(conexao, "ROLLBACK");
     return ERRO_PERSISTENCIA;
 }
 
-/* Salva uma fotografia das listas. O COMMIT só confirma se todas as tabelas
-   forem gravadas; em caso de erro, o ROLLBACK preserva os dados anteriores. */
+// salva o estado atual do banco no sqlite em uma única transação
 Resultado salvarBanco(Banco *banco) {
     if (banco == NULL) {
         return ERRO_ARGUMENTO_INVALIDO;
@@ -84,12 +82,11 @@ Resultado salvarBanco(Banco *banco) {
             &consulta)) {
         return desfazerGravacao(conexao, consulta);
     }
-    for (Cliente *clienteAtual = banco->clientes; clienteAtual != NULL;
-         clienteAtual = clienteAtual->proximo) {
-        sqlite3_bind_int(consulta, 1, clienteAtual->id);
-        sqlite3_bind_text(consulta, 2, clienteAtual->nome, -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int(consulta, 3, clienteAtual->possuiEmprestimo);
-        sqlite3_bind_int(consulta, 4, clienteAtual->possuiTitulo);
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        sqlite3_bind_int(consulta, 1, cliente->id);
+        sqlite3_bind_text(consulta, 2, cliente->nome, -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(consulta, 3, cliente->possuiEmprestimo);
+        sqlite3_bind_int(consulta, 4, cliente->possuiTitulo);
         if (!gravarRegistro(consulta)) {
             return desfazerGravacao(conexao, consulta);
         }
@@ -101,14 +98,12 @@ Resultado salvarBanco(Banco *banco) {
                           &consulta)) {
         return desfazerGravacao(conexao, consulta);
     }
-    for (Cliente *clienteAtual = banco->clientes; clienteAtual != NULL;
-         clienteAtual = clienteAtual->proximo) {
-        for (Conta *contaAtual = clienteAtual->contas; contaAtual != NULL;
-             contaAtual = contaAtual->proximo) {
-            sqlite3_bind_int(consulta, 1, contaAtual->numeroBase);
-            sqlite3_bind_int(consulta, 2, clienteAtual->id);
-            sqlite3_bind_int(consulta, 3, contaAtual->tipo);
-            sqlite3_bind_int64(consulta, 4, contaAtual->saldoCentavos);
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        for (Conta *conta = cliente->contas; conta != NULL; conta = conta->proximo) {
+            sqlite3_bind_int(consulta, 1, conta->numeroBase);
+            sqlite3_bind_int(consulta, 2, cliente->id);
+            sqlite3_bind_int(consulta, 3, conta->tipo);
+            sqlite3_bind_int64(consulta, 4, conta->saldoCentavos);
             if (!gravarRegistro(consulta)) {
                 return desfazerGravacao(conexao, consulta);
             }
@@ -121,17 +116,15 @@ Resultado salvarBanco(Banco *banco) {
             &consulta)) {
         return desfazerGravacao(conexao, consulta);
     }
-    for (Cliente *clienteAtual = banco->clientes; clienteAtual != NULL;
-         clienteAtual = clienteAtual->proximo) {
-        for (Conta *contaAtual = clienteAtual->contas; contaAtual != NULL;
-             contaAtual = contaAtual->proximo) {
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        for (Conta *conta = cliente->contas; conta != NULL; conta = conta->proximo) {
             long long ordem = 0;
-            for (Movimentacao *movimentacaoAtual = contaAtual->historico; movimentacaoAtual != NULL;
-                 movimentacaoAtual = movimentacaoAtual->proximo) {
-                sqlite3_bind_int(consulta, 1, contaAtual->numeroBase);
+            for (Movimentacao *movimentacao = conta->historico; movimentacao != NULL;
+                 movimentacao = movimentacao->proximo) {
+                sqlite3_bind_int(consulta, 1, conta->numeroBase);
                 sqlite3_bind_int64(consulta, 2, ordem);
-                sqlite3_bind_int64(consulta, 3, movimentacaoAtual->valorCentavos);
-                sqlite3_bind_text(consulta, 4, &movimentacaoAtual->operacao, 1, SQLITE_TRANSIENT);
+                sqlite3_bind_int64(consulta, 3, movimentacao->valorCentavos);
+                sqlite3_bind_text(consulta, 4, &movimentacao->operacao, 1, SQLITE_TRANSIENT);
                 if (!gravarRegistro(consulta) || ordem == LLONG_MAX) {
                     return desfazerGravacao(conexao, consulta);
                 }
@@ -147,13 +140,13 @@ Resultado salvarBanco(Banco *banco) {
             &consulta)) {
         return desfazerGravacao(conexao, consulta);
     }
-    for (Premiacao *premiacaoAtual = banco->premiacoes; premiacaoAtual != NULL;
-         premiacaoAtual = premiacaoAtual->proximo) {
-        sqlite3_bind_int64(consulta, 1, premiacaoAtual->id);
-        sqlite3_bind_int(consulta, 2, premiacaoAtual->cliente->id);
-        sqlite3_bind_int(consulta, 3, premiacaoAtual->conta->numeroBase);
-        sqlite3_bind_int64(consulta, 4, premiacaoAtual->saldoBaseCentavos);
-        sqlite3_bind_int64(consulta, 5, premiacaoAtual->valorCentavos);
+    for (Premiacao *premiacao = banco->premiacoes; premiacao != NULL;
+         premiacao = premiacao->proximo) {
+        sqlite3_bind_int64(consulta, 1, premiacao->id);
+        sqlite3_bind_int(consulta, 2, premiacao->cliente->id);
+        sqlite3_bind_int(consulta, 3, premiacao->conta->numeroBase);
+        sqlite3_bind_int64(consulta, 4, premiacao->saldoBaseCentavos);
+        sqlite3_bind_int64(consulta, 5, premiacao->valorCentavos);
         if (!gravarRegistro(consulta)) {
             return desfazerGravacao(conexao, consulta);
         }
@@ -180,12 +173,10 @@ Resultado salvarBanco(Banco *banco) {
 }
 
 Conta *buscarContaPeloNumero(Banco *banco, int numeroConta) {
-    for (Cliente *clienteAtual = banco->clientes; clienteAtual != NULL;
-         clienteAtual = clienteAtual->proximo) {
-        for (Conta *contaAtual = clienteAtual->contas; contaAtual != NULL;
-             contaAtual = contaAtual->proximo) {
-            if (contaAtual->numeroBase == numeroConta) {
-                return contaAtual;
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        for (Conta *conta = cliente->contas; conta != NULL; conta = conta->proximo) {
+            if (conta->numeroBase == numeroConta) {
+                return conta;
             }
         }
     }
@@ -203,13 +194,12 @@ Resultado finalizarRecuperacao(sqlite3_stmt *consulta, Resultado resultado) {
 Resultado recuperarClientes(Banco *banco) {
     sqlite3 *conexao = banco->conexao;
     sqlite3_stmt *consulta = NULL;
-    int estadoConsulta;
     if (!prepararConsulta(
             conexao, "SELECT id,nome,possui_emprestimo,possui_titulo FROM clientes ORDER BY id",
             &consulta)) {
         return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
     }
-    estadoConsulta = sqlite3_step(consulta);
+    int estadoConsulta = sqlite3_step(consulta);
     while (estadoConsulta == SQLITE_ROW) {
         long long identificador = sqlite3_column_int64(consulta, 0);
         const char *nome = (const char *)sqlite3_column_text(consulta, 1);
@@ -223,49 +213,43 @@ Resultado recuperarClientes(Banco *banco) {
             return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
         }
         const char *texto = nome;
-        while (*texto && ehEspaco(*texto) == 1) {
+        while (*texto && ehEspaco(*texto)) {
             texto++;
         }
         if (!*texto) {
             return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
         }
-        Cliente *novoCliente = malloc(sizeof(Cliente));
+        Cliente *novoCliente = calloc(1, sizeof(Cliente));
         if (novoCliente == NULL) {
             return finalizarRecuperacao(consulta, ERRO_MEMORIA);
         }
         novoCliente->id = (int)identificador;
-        novoCliente->nome = NULL;
         novoCliente->possuiEmprestimo = possuiEmprestimo;
         novoCliente->possuiTitulo = possuiTitulo;
-        novoCliente->contas = NULL;
-        novoCliente->proximo = banco->clientes;
         novoCliente->nome = malloc(strlen(nome) + 1);
         if (novoCliente->nome == NULL) {
             free(novoCliente);
             return finalizarRecuperacao(consulta, ERRO_MEMORIA);
         }
         strcpy(novoCliente->nome, nome);
+        novoCliente->proximo = banco->clientes;
         banco->clientes = novoCliente;
         banco->quantidadeClientes++;
         estadoConsulta = sqlite3_step(consulta);
     }
-    if (estadoConsulta != SQLITE_DONE) {
-        return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
-    }
-    return finalizarRecuperacao(consulta, BANCO_OK);
+    return finalizarRecuperacao(consulta, (estadoConsulta == SQLITE_DONE) ? BANCO_OK : ERRO_PERSISTENCIA);
 }
 
 /* Recupera contas e seus saldos. */
 Resultado recuperarContas(Banco *banco) {
     sqlite3 *conexao = banco->conexao;
     sqlite3_stmt *consulta = NULL;
-    int estadoConsulta;
     if (!prepararConsulta(conexao,
                           "SELECT numero,cliente_id,tipo,saldo FROM contas ORDER BY numero",
                           &consulta)) {
         return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
     }
-    estadoConsulta = sqlite3_step(consulta);
+    int estadoConsulta = sqlite3_step(consulta);
     while (estadoConsulta == SQLITE_ROW) {
         long long numeroConta = sqlite3_column_int64(consulta, 0);
         long long identificador = sqlite3_column_int64(consulta, 1);
@@ -281,14 +265,13 @@ Resultado recuperarContas(Banco *banco) {
             (tipo == SALARIO && contaDoTipo(clienteAtual, CORRENTE) != NULL)) {
             return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
         }
-        Conta *novaConta = malloc(sizeof(Conta));
+        Conta *novaConta = calloc(1, sizeof(Conta));
         if (novaConta == NULL) {
             return finalizarRecuperacao(consulta, ERRO_MEMORIA);
         }
         novaConta->numeroBase = (int)numeroConta;
         novaConta->tipo = (TipoConta)tipo;
         novaConta->saldoCentavos = sqlite3_column_int64(consulta, 3);
-        novaConta->historico = NULL;
         novaConta->proximo = clienteAtual->contas;
         clienteAtual->contas = novaConta;
         estadoConsulta = sqlite3_step(consulta);
@@ -296,11 +279,10 @@ Resultado recuperarContas(Banco *banco) {
     if (estadoConsulta != SQLITE_DONE) {
         return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
     }
-    for (Cliente *clienteAtual = banco->clientes; clienteAtual != NULL;
-         clienteAtual = clienteAtual->proximo) {
-        if ((clienteAtual->possuiTitulo && contaDoTipo(clienteAtual, SALARIO) == NULL) ||
-            (clienteAtual->possuiEmprestimo && (contaDoTipo(clienteAtual, CORRENTE) == NULL ||
-                                                contaDoTipo(clienteAtual, POUPANCA) == NULL))) {
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        if ((cliente->possuiTitulo && contaDoTipo(cliente, SALARIO) == NULL) ||
+            (cliente->possuiEmprestimo && (contaDoTipo(cliente, CORRENTE) == NULL ||
+                                           contaDoTipo(cliente, POUPANCA) == NULL))) {
             return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
         }
     }
@@ -311,14 +293,13 @@ Resultado recuperarContas(Banco *banco) {
 Resultado recuperarMovimentacoes(Banco *banco) {
     sqlite3 *conexao = banco->conexao;
     sqlite3_stmt *consulta = NULL;
-    int estadoConsulta;
     if (!prepararConsulta(conexao,
                           "SELECT conta_numero,valor,operacao FROM movimentacoes ORDER BY "
                           "conta_numero,ordem DESC",
                           &consulta)) {
         return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
     }
-    estadoConsulta = sqlite3_step(consulta);
+    int estadoConsulta = sqlite3_step(consulta);
     while (estadoConsulta == SQLITE_ROW) {
         long long numeroConta = sqlite3_column_int64(consulta, 0);
         long long valorCentavos = sqlite3_column_int64(consulta, 1);
@@ -339,24 +320,20 @@ Resultado recuperarMovimentacoes(Banco *banco) {
         }
         estadoConsulta = sqlite3_step(consulta);
     }
-    if (estadoConsulta != SQLITE_DONE) {
-        return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
-    }
-    return finalizarRecuperacao(consulta, BANCO_OK);
+    return finalizarRecuperacao(consulta, (estadoConsulta == SQLITE_DONE) ? BANCO_OK : ERRO_PERSISTENCIA);
 }
 
 /* Recupera os prêmios e suas referências a clientes e contas. */
 Resultado recuperarPremiacoes(Banco *banco) {
     sqlite3 *conexao = banco->conexao;
     sqlite3_stmt *consulta = NULL;
-    int estadoConsulta;
     if (!prepararConsulta(
             conexao,
             "SELECT id,cliente_id,conta_numero,saldo_base,valor FROM premiacoes ORDER BY id",
             &consulta)) {
         return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
     }
-    estadoConsulta = sqlite3_step(consulta);
+    int estadoConsulta = sqlite3_step(consulta);
     while (estadoConsulta == SQLITE_ROW) {
         long long identificador = sqlite3_column_int64(consulta, 0);
         long long clienteId = sqlite3_column_int64(consulta, 1);
@@ -387,10 +364,7 @@ Resultado recuperarPremiacoes(Banco *banco) {
         banco->premiacoes = novaPremiacao;
         estadoConsulta = sqlite3_step(consulta);
     }
-    if (estadoConsulta != SQLITE_DONE) {
-        return finalizarRecuperacao(consulta, ERRO_PERSISTENCIA);
-    }
-    return finalizarRecuperacao(consulta, BANCO_OK);
+    return finalizarRecuperacao(consulta, (estadoConsulta == SQLITE_DONE) ? BANCO_OK : ERRO_PERSISTENCIA);
 }
 
 /* Mantém os números das próximas inclusões mesmo depois de fechar o programa. */
@@ -401,22 +375,19 @@ Resultado recuperarConfiguracoes(Banco *banco) {
     long long maiorSorteio = 0;
     long long valor = 0;
 
-    for (Cliente *clienteAtual = banco->clientes; clienteAtual != NULL;
-         clienteAtual = clienteAtual->proximo) {
-        if (clienteAtual->id > maiorCliente) {
-            maiorCliente = clienteAtual->id;
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        if (cliente->id > maiorCliente) {
+            maiorCliente = cliente->id;
         }
-        for (Conta *contaAtual = clienteAtual->contas; contaAtual != NULL;
-             contaAtual = contaAtual->proximo) {
-            if (contaAtual->numeroBase > maiorConta) {
-                maiorConta = contaAtual->numeroBase;
+        for (Conta *conta = cliente->contas; conta != NULL; conta = conta->proximo) {
+            if (conta->numeroBase > maiorConta) {
+                maiorConta = conta->numeroBase;
             }
         }
     }
-    for (Premiacao *premiacaoAtual = banco->premiacoes; premiacaoAtual != NULL;
-         premiacaoAtual = premiacaoAtual->proximo) {
-        if (premiacaoAtual->id > maiorSorteio) {
-            maiorSorteio = premiacaoAtual->id;
+    for (Premiacao *premiacao = banco->premiacoes; premiacao != NULL; premiacao = premiacao->proximo) {
+        if (premiacao->id > maiorSorteio) {
+            maiorSorteio = premiacao->id;
         }
     }
     if (!lerConfiguracao(conexao, "proximo_cliente", maiorCliente + 1LL, &valor) ||
@@ -441,32 +412,23 @@ Resultado recuperarConfiguracoes(Banco *banco) {
     return BANCO_OK;
 }
 
-/* Primeiro os clientes, depois os registros que dependem deles. */
+// carrega todos os dados salvos do sqlite de volta pra memória
 Resultado recuperarBanco(Banco *banco) {
     long long versao = 0;
     if (!lerConfiguracao(banco->conexao, "versao", 1, &versao) || versao != 1) {
         return ERRO_PERSISTENCIA;
     }
-    Resultado resultado = recuperarClientes(banco);
-    if (resultado != BANCO_OK) {
-        return resultado;
-    }
-    resultado = recuperarContas(banco);
-    if (resultado != BANCO_OK) {
-        return resultado;
-    }
-    resultado = recuperarMovimentacoes(banco);
-    if (resultado != BANCO_OK) {
-        return resultado;
-    }
-    resultado = recuperarPremiacoes(banco);
-    if (resultado != BANCO_OK) {
+    Resultado resultado;
+    if ((resultado = recuperarClientes(banco)) != BANCO_OK ||
+        (resultado = recuperarContas(banco)) != BANCO_OK ||
+        (resultado = recuperarMovimentacoes(banco)) != BANCO_OK ||
+        (resultado = recuperarPremiacoes(banco)) != BANCO_OK) {
         return resultado;
     }
     return recuperarConfiguracoes(banco);
 }
 
-/* CREATE TABLE IF NOT EXISTS preserva as tabelas e os dados já existentes. */
+// cria as tabelas no sqlite se o arquivo for novo
 Resultado criarTabelas(sqlite3 *conexao) {
     const char *tabelas =
         "PRAGMA foreign_keys=ON;"
@@ -496,6 +458,7 @@ Resultado criarTabelas(sqlite3 *conexao) {
     return BANCO_OK;
 }
 
+// abre o banco de dados sqlite, cria tabelas e carrega os dados
 Resultado abrirPersistencia(Banco *banco, const char *caminho) {
     if (banco == NULL || caminho == NULL || *caminho == '\0' || banco->conexao != NULL ||
         banco->clientes != NULL || banco->premiacoes != NULL) {
