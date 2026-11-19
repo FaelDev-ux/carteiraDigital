@@ -134,6 +134,80 @@ static void exibirDinheiro(long long centavos) {
     llabs(centavos / 100), llabs(centavos % 100));
 }
 
+static void mostrarLinhaCliente(const Cliente* cliente, const Conta* conta, long long valor) {
+  int tamanhoNome = (int)strcspn(cliente->nome, "\r\n"); //mede tamanho do nome até a quebra de linha
+  printf("%.*s | %04d-%02d | ", tamanhoNome, cliente->nome, conta->numeroBase, (int)conta->tipo);
+  exibirDinheiro(valor);
+  putchar('\n');
+}
+
+static void mostrarHistoricoBanco(Banco* banco) {
+  long long total;
+  Resultado resultado = consultarSaldoTotal(banco, &total);
+  if (resultado != BANCO_OK) {
+    puts(mensagemResultado(resultado));
+    return;
+  }
+
+  limparTerminal();
+  puts("=== Saldo total do banco ===");
+  printf("%d clientes | ", banco->quantidadeClientes);
+  exibirDinheiro(total);
+  putchar('\n');
+
+  puts("\n=== Clientes aptos a empréstimos ===");
+  int encontrados = 0;
+  for (const Cliente* cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+    long long limite;
+    resultado = consultarLimiteEmprestimo(banco, cliente->id, &limite);
+    if (resultado == BANCO_OK) {
+      mostrarLinhaCliente(cliente, contaDoTipo(cliente, CORRENTE), limite);
+      encontrados++;
+    }
+    else if (resultado != ERRO_EMPRESTIMO_NAO_PERMITIDO) {
+      puts(mensagemResultado(resultado));
+    }
+  }
+
+  if (encontrados == 0) {
+    puts("Nenhum cliente.");
+  }
+
+  puts("\n=== Clientes com saldo negativo na conta corrente ===");
+  encontrados = 0;
+  for (const Cliente* cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+    if (clienteComCorrenteNegativa(cliente)) {
+      const Conta* corrente = contaDoTipo(cliente, CORRENTE);
+      mostrarLinhaCliente(cliente, corrente, corrente->saldoCentavos);
+      encontrados++;
+    }
+  }
+  if (encontrados == 0) {
+    puts("Nenhum cliente.");
+  }
+
+  puts("\n=== Clientes aptos a comprar títulos ===");
+  encontrados = 0;
+  for (const Cliente* cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+    if (aptoTitulo(cliente)) {
+      const Conta* salario = contaDoTipo(cliente, SALARIO);
+      mostrarLinhaCliente(cliente, salario, salario->saldoCentavos);
+      encontrados++;
+    }
+  }
+  if (encontrados == 0) {
+    puts("Nenhum cliente.");
+  }
+
+  puts("\n=== Clientes premiados no sorteio ===");
+  if (banco->premiacoes == NULL) {
+    puts("Nenhum cliente.");
+  }
+  for (const Premiacao* premio = banco->premiacoes; premio != NULL; premio = premio->proximo) {
+    mostrarLinhaCliente(premio->cliente, premio->conta, premio->valorCentavos);
+  }
+}
+
 static void mostrarExtrato(Banco* banco, const char* numero) {
   const Movimentacao* movimento = consultarExtrato(banco, numero);
   if (banco->ultimoResultado != BANCO_OK) {
@@ -286,7 +360,7 @@ int main(void) {
       }
       break;
     case '2':
-      puts("Histórico do banco em breve.");
+      mostrarHistoricoBanco(banco);
       break;
     case '3':
       puts("Sorteio em breve.");
