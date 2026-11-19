@@ -352,10 +352,23 @@ static int acessarConta(Banco* banco) {
   return 1;
 }
 
-int main(void) {
+int main(int argc, char* argv[]) {
+  if (argc > 2) {
+    fprintf(stderr, "Uso: %s [arquivo-do-banco]\n", argv[0]);
+    return EXIT_FAILURE;
+  }
+
+  const char* caminho = argc == 2 ? argv[1] : "carteira.db";
   Banco* banco = criarBanco();
   if (banco == NULL) {
     puts("Não foi possível criar o banco.");
+    return EXIT_FAILURE;
+  }
+
+  Resultado resultado = abrirPersistencia(banco, caminho);
+  if (resultado != BANCO_OK) {
+    fprintf(stderr, "%s (%s)\n", mensagemResultado(resultado), caminho);
+    liberarBanco(banco);
     return EXIT_FAILURE;
   }
 
