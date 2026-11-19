@@ -64,8 +64,7 @@ void liberarClassificacaoFibonacci(ClassificacaoFibonacci *c) {
     c->primeiraAcimaMedia = -1;
 }
 
-Resultado classificarFibonacci(const long long *valores, int quantidade,
-                               ClassificacaoFibonacci *saida) {
+Resultado classificarFibonacci(const long long *valores, int quantidade, ClassificacaoFibonacci *saida) {
     if (saida == NULL) {
         return ERRO_ARGUMENTO_INVALIDO;
     }
