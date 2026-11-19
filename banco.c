@@ -3,30 +3,23 @@
 #include <sqlite3.h>
 #include "meu_banco.h"
 
+// inicializa a estrutura do banco com os IDs e números de conta iniciais
 Banco *criarBanco(void) {
-    Banco *banco = malloc(sizeof *banco);
+    Banco *banco = calloc(1, sizeof *banco);
     if (banco == NULL) {
         return NULL;
     }
-    /* Inicializamos cada ponteiro e contador antes de publicar a estrutura. */
-    banco->clientes = NULL;
-    banco->quantidadeClientes = 0;
     banco->proximoIdCliente = 1;
     banco->proximoNumero = 1000;
-    banco->aberto = 0;
-    banco->premiacoes = NULL;
     banco->proximoSorteio = 1;
-    banco->revisao = 0;
-    banco->conexao = NULL;
-    banco->ultimoResultado = BANCO_OK;
     return banco;
 }
 
+// limpa toda a memória (clientes, contas, movimentações e fecha o sqlite)
 void liberarBanco(Banco *banco) {
     if (banco == NULL) {
         return;
     }
-    /* Premiações referenciam clientes/contas; não são donas desses registros. */
     while (banco->premiacoes != NULL) {
         Premiacao *proxima = banco->premiacoes->proximo;
         free(banco->premiacoes);
@@ -52,6 +45,7 @@ void liberarBanco(Banco *banco) {
     free(banco);
 }
 
+// marca o banco como aberto para permitir operações
 Resultado abrirBanco(Banco *banco) {
     if (banco == NULL) {
         return ERRO_ARGUMENTO_INVALIDO;
@@ -60,7 +54,7 @@ Resultado abrirBanco(Banco *banco) {
     return BANCO_OK;
 }
 
-/* Testamos os limites antes da soma, inclusive para saldos negativos. */
+// soma dois valores conferindo se não dá overflow
 int somaSegura(long long a, long long b, long long *resultado) {
     if ((b > 0 && a > LLONG_MAX - b) || (b < 0 && a < LLONG_MIN - b)) {
         return 0;
@@ -69,6 +63,7 @@ int somaSegura(long long a, long long b, long long *resultado) {
     return 1;
 }
 
+// converte os códigos de resultado em mensagens de texto
 const char *mensagemResultado(Resultado resultado) {
     switch (resultado) {
     case BANCO_OK:
@@ -101,11 +96,7 @@ const char *mensagemResultado(Resultado resultado) {
     return "Erro desconhecido.";
 }
 
-/* Reconhece os caracteres usados como espaço no texto de entrada. */
+// checa se o caractere é espaço em branco (espaço, tab, quebra de linha)
 int ehEspaco(char caractere) {
-    if (caractere == ' ' || caractere == '\t' || caractere == '\n' || caractere == '\r' ||
-        caractere == '\v' || caractere == '\f') {
-        return 1;
-    }
-    return 0;
+    return caractere == ' ' || (caractere >= '\t' && caractere <= '\r');
 }

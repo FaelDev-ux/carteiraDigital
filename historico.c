@@ -1,11 +1,10 @@
 #include <stdlib.h>
 #include "meu_banco.h"
 
+// adiciona uma movimentação (saque 'S', depósito 'D' ou empréstimo 'E') na conta
 Resultado registrarMovimentacao(Conta *conta, long long valorCentavos, char operacao) {
-    if (conta == NULL || valorCentavos <= 0) {
-        return ERRO_ARGUMENTO_INVALIDO;
-    }
-    if (operacao != 'S' && operacao != 'D' && operacao != 'E') {
+    if (conta == NULL || valorCentavos <= 0 ||
+        (operacao != 'S' && operacao != 'D' && operacao != 'E')) {
         return ERRO_ARGUMENTO_INVALIDO;
     }
     Movimentacao *nova = malloc(sizeof(Movimentacao));
@@ -19,6 +18,7 @@ Resultado registrarMovimentacao(Conta *conta, long long valorCentavos, char oper
     return BANCO_OK;
 }
 
+// limpa toda a lista de movimentações de uma conta
 void liberarMovimentacoes(Movimentacao *historico) {
     while (historico != NULL) {
         Movimentacao *proxima = historico->proximo;
@@ -27,8 +27,7 @@ void liberarMovimentacoes(Movimentacao *historico) {
     }
 }
 
-/* Retorna a lista existente. A interface exibe até cinco registros.
-   Quem consulta não deve liberar os registros: eles pertencem à conta. */
+// pega o extrato (lista de movimentações) da conta
 const Movimentacao *consultarExtrato(Banco *banco, const char *numeroConta) {
     if (banco == NULL) {
         return NULL;
@@ -37,7 +36,7 @@ const Movimentacao *consultarExtrato(Banco *banco, const char *numeroConta) {
     if (numeroConta == NULL) {
         return NULL;
     }
-    if (banco->aberto == 0) {
+    if (!banco->aberto) {
         banco->ultimoResultado = ERRO_BANCO_FECHADO;
         return NULL;
     }
@@ -50,25 +49,21 @@ const Movimentacao *consultarExtrato(Banco *banco, const char *numeroConta) {
     return conta->historico;
 }
 
-/* A regra calcula o total; apenas a apresentação fica na main.c. */
+// calcula a soma de todos os saldos de todas as contas do banco
 Resultado consultarSaldoTotal(Banco *banco, long long *total) {
     if (banco == NULL || total == NULL) {
         return ERRO_ARGUMENTO_INVALIDO;
     }
     *total = 0;
-    if (banco->aberto == 0) {
+    if (!banco->aberto) {
         return ERRO_BANCO_FECHADO;
     }
-    Cliente *clienteAtual = banco->clientes;
-    while (clienteAtual != NULL) {
-        Conta *contaAtual = clienteAtual->contas;
-        while (contaAtual != NULL) {
-            if (somaSegura(*total, contaAtual->saldoCentavos, total) == 0) {
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        for (Conta *conta = cliente->contas; conta != NULL; conta = conta->proximo) {
+            if (!somaSegura(*total, conta->saldoCentavos, total)) {
                 return ERRO_LIMITE_NUMERICO;
             }
-            contaAtual = contaAtual->proximo;
         }
-        clienteAtual = clienteAtual->proximo;
     }
     return BANCO_OK;
 }

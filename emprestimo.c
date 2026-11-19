@@ -1,6 +1,7 @@
 #include <limits.h>
 #include "meu_banco.h"
 
+// calcula o limite de empréstimo: precisa ter poupança e corrente positivas, e o limite é 2.5x a corrente
 Resultado consultarLimiteEmprestimo(Banco *banco, int clienteId, long long *limite) {
     if (banco == NULL || limite == NULL) {
         return ERRO_ARGUMENTO_INVALIDO;
@@ -35,24 +36,24 @@ Resultado consultarLimiteEmprestimo(Banco *banco, int clienteId, long long *limi
     return BANCO_OK;
 }
 
+// concede o empréstimo se estiver dentro do limite e credita na corrente
 Resultado solicitarEmprestimo(Banco *banco, const char *numeroConta, long long valorCentavos) {
     if (banco == NULL || numeroConta == NULL || valorCentavos <= 0) {
         return ERRO_ARGUMENTO_INVALIDO;
     }
-    if (banco->aberto == 0) {
+    if (!banco->aberto) {
         return ERRO_BANCO_FECHADO;
     }
     Conta *conta = buscarConta(banco, numeroConta);
     if (conta == NULL) {
         return ERRO_CONTA_NAO_ENCONTRADA;
     }
-    Resultado resultado;
     if (conta->tipo != CORRENTE) {
         return ERRO_EMPRESTIMO_NAO_PERMITIDO;
     }
     Cliente *cliente = buscarTitular(banco, conta);
     long long limite = 0;
-    resultado = consultarLimiteEmprestimo(banco, cliente->id, &limite);
+    Resultado resultado = consultarLimiteEmprestimo(banco, cliente->id, &limite);
     if (resultado != BANCO_OK) {
         return resultado;
     }

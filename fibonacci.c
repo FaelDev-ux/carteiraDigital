@@ -3,10 +3,12 @@
 #include <stdlib.h>
 #include "fibonacci.h"
 
+// checa se o valor é par
 int ehPar(long long valor) {
     return valor % 2 == 0;
 }
 
+// checa se o valor é primo
 int ehPrimo(long long valor) {
     if (valor < 2) {
         return 0;
@@ -14,7 +16,6 @@ int ehPrimo(long long valor) {
     if (valor % 2 == 0) {
         return valor == 2;
     }
-    /* Divisão no limite evita o estouro de divisor * divisor do original. */
     for (long long divisor = 3; divisor <= valor / divisor; divisor += 2) {
         if (valor % divisor == 0) {
             return 0;
@@ -23,18 +24,13 @@ int ehPrimo(long long valor) {
     return 1;
 }
 
+// soma os números da sequência de fibonacci estritamente menores que o limite
 Resultado somaFibonacci(long long limite, long long *soma) {
     if (soma == NULL || limite < 0) {
         return ERRO_ARGUMENTO_INVALIDO;
     }
     long long a = 0, b = 1, c = 0;
-    if (limite > 1) {
-        *soma = 1;
-    } else {
-        *soma = 0;
-    }
-    /* Preserva a aula: soma os termos estritamente menores que o limite,
-       incluindo as duas ocorrências de 1. Não é a soma de N termos. */
+    *soma = (limite > 1) ? 1 : 0;
     while (c < limite) {
         if (a > LLONG_MAX - b) {
             break;
@@ -52,27 +48,21 @@ Resultado somaFibonacci(long long limite, long long *soma) {
     return BANCO_OK;
 }
 
-void liberarClassificacaoFibonacci(ClassificacaoFibonacci *c) {
-    if (c == NULL) {
+// libera a memória das pontuações calculadas
+void liberarClassificacaoFibonacci(ClassificacaoFibonacci *classificacao) {
+    if (classificacao == NULL) {
         return;
     }
-    free(c->pontuacoes);
-    c->pontuacoes = NULL;
-    c->quantidade = 0;
-    c->maiorPrimo = -1;
-    c->maiorPar = -1;
-    c->primeiraAcimaMedia = -1;
+    free(classificacao->pontuacoes);
+    *classificacao = (ClassificacaoFibonacci){ .maiorPrimo = -1, .maiorPar = -1, .primeiraAcimaMedia = -1 };
 }
 
+// calcula as pontuações e identifica o maior primo, maior par e primeira acima da média
 Resultado classificarFibonacci(const long long *valores, int quantidade, ClassificacaoFibonacci *saida) {
     if (saida == NULL) {
         return ERRO_ARGUMENTO_INVALIDO;
     }
-    saida->pontuacoes = NULL;
-    saida->quantidade = 0;
-    saida->maiorPrimo = -1;
-    saida->maiorPar = -1;
-    saida->primeiraAcimaMedia = -1;
+    *saida = (ClassificacaoFibonacci){ .maiorPrimo = -1, .maiorPar = -1, .primeiraAcimaMedia = -1 };
     if (valores == NULL || quantidade <= 0 ||
         (size_t)quantidade > SIZE_MAX / sizeof *saida->pontuacoes) {
         return ERRO_ARGUMENTO_INVALIDO;
@@ -90,8 +80,6 @@ Resultado classificarFibonacci(const long long *valores, int quantidade, Classif
             liberarClassificacaoFibonacci(saida);
             return resultado;
         }
-        /* Alteração solicitada: somente o fatorial foi removido da fórmula.
-           Divisão inteira preserva o truncamento do resultado inteiro da aula. */
         long long pontos = soma / 3;
         saida->pontuacoes[i] = pontos;
         media += pontos / quantidade;
@@ -108,8 +96,6 @@ Resultado classificarFibonacci(const long long *valores, int quantidade, Classif
     media += restos / quantidade;
     for (int i = 0; i < quantidade; i++) {
         long long pontos = saida->pontuacoes[i];
-        /* Nunca acessamos posição -1 quando uma categoria não tem vencedor.
-           Preservamos a comparação por VALOR do código original. */
         if ((saida->maiorPrimo == -1 || pontos != saida->pontuacoes[saida->maiorPrimo]) &&
             (saida->maiorPar == -1 || pontos != saida->pontuacoes[saida->maiorPar]) &&
             pontos > media) {
@@ -120,32 +106,25 @@ Resultado classificarFibonacci(const long long *valores, int quantidade, Classif
     return BANCO_OK;
 }
 
+// decide qual dos 5 participantes ganhou pelo critério: primo > par > acima da média
 Resultado escolherPorFibonacci(const Participante *participantes, int quantidade, int *indice) {
-    /* O código da aula classifica os valores sem gerar números aleatórios. */
     if (indice == NULL || participantes == NULL || quantidade != 5) {
         return ERRO_ARGUMENTO_INVALIDO;
     }
     *indice = -1;
-    long long *valores = malloc((size_t)quantidade * sizeof *valores);
-    if (valores == NULL) {
-        return ERRO_MEMORIA;
-    }
-    const Participante *p = participantes;
-    for (int i = 0; i < quantidade; i++, p = p->proximo) {
-        if (p == NULL || p->conta == NULL) {
-            free(valores);
+    long long valores[5];
+    const Participante *participante = participantes;
+    for (int i = 0; i < quantidade; i++, participante = participante->proximo) {
+        if (participante == NULL || participante->conta == NULL) {
             return ERRO_ARGUMENTO_INVALIDO;
         }
-        valores[i] = p->conta->saldoCentavos;
+        valores[i] = participante->conta->saldoCentavos;
     }
     ClassificacaoFibonacci classificacao;
     Resultado resultado = classificarFibonacci(valores, quantidade, &classificacao);
-    free(valores);
     if (resultado != BANCO_OK) {
         return resultado;
     }
-    /* A carteira concede um único prêmio: usa a melhor categoria disponível.
-       Empates ficam com o primeiro da lista, já ordenada por saldo e conta. */
     if (classificacao.maiorPrimo >= 0) {
         *indice = classificacao.maiorPrimo;
     } else if (classificacao.maiorPar >= 0) {
@@ -153,7 +132,7 @@ Resultado escolherPorFibonacci(const Participante *participantes, int quantidade
     } else if (classificacao.primeiraAcimaMedia >= 0) {
         *indice = classificacao.primeiraAcimaMedia;
     } else {
-        *indice = 0; /* Empate geral: primeiro da classificação decrescente. */
+        *indice = 0;
     }
     liberarClassificacaoFibonacci(&classificacao);
     return BANCO_OK;
