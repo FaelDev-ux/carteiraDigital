@@ -2,23 +2,22 @@
 #include <stdlib.h>
 #include "meu_banco.h"
 
+// checa se o cliente pode comprar título (conta salário com saldo entre 1k e 1.5k)
 int aptoTitulo(const Cliente *cliente) {
-    Conta *salario = contaDoTipo(cliente, SALARIO);
-    if (cliente == NULL || salario == NULL) {
+    if (cliente == NULL) {
         return 0;
     }
-    if (cliente->possuiTitulo == 0 && salario->saldoCentavos >= 100000 &&
-        salario->saldoCentavos <= 150000) {
-        return 1;
-    }
-    return 0;
+    Conta *salario = contaDoTipo(cliente, SALARIO);
+    return (salario != NULL && !cliente->possuiTitulo &&
+            salario->saldoCentavos >= 100000 && salario->saldoCentavos <= 150000);
 }
 
+// registra a compra do título de capitalização pro cliente
 Resultado adquirirTitulo(Banco *banco, const char *numeroConta) {
     if (banco == NULL || numeroConta == NULL) {
         return ERRO_ARGUMENTO_INVALIDO;
     }
-    if (banco->aberto == 0) {
+    if (!banco->aberto) {
         return ERRO_BANCO_FECHADO;
     }
     Conta *conta = buscarConta(banco, numeroConta);
@@ -26,7 +25,7 @@ Resultado adquirirTitulo(Banco *banco, const char *numeroConta) {
         return ERRO_CONTA_NAO_ENCONTRADA;
     }
     Cliente *cliente = buscarTitular(banco, conta);
-    if (conta->tipo != SALARIO || aptoTitulo(cliente) == 0) {
+    if (conta->tipo != SALARIO || !aptoTitulo(cliente)) {
         return ERRO_TITULO_NAO_PERMITIDO;
     }
     /* O enunciado não fixa preço: apenas registramos um título por cliente. */
@@ -38,6 +37,7 @@ Resultado adquirirTitulo(Banco *banco, const char *numeroConta) {
     return resultado;
 }
 
+// limpa a lista temporária de participantes do sorteio
 void liberarParticipantes(Participante *participante) {
     while (participante != NULL) {
         Participante *proximo = participante->proximo;
@@ -46,19 +46,19 @@ void liberarParticipantes(Participante *participante) {
     }
 }
 
+// busca e ordena os 5 clientes com título com os maiores saldos para o sorteio
 Participante *selecionarParticipantes(Banco *banco) {
     if (banco == NULL) {
         return NULL;
     }
-    if (banco->aberto == 0) {
+    if (!banco->aberto) {
         banco->ultimoResultado = ERRO_BANCO_FECHADO;
         return NULL;
     }
     Participante *inicio = NULL;
-    Cliente *clienteAtual = banco->clientes;
-    while (clienteAtual != NULL) {
-        Conta *salario = contaDoTipo(clienteAtual, SALARIO);
-        if (clienteAtual->possuiTitulo == 1 && salario != NULL &&
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        Conta *salario = contaDoTipo(cliente, SALARIO);
+        if (cliente->possuiTitulo == 1 && salario != NULL &&
             salario->saldoCentavos >= 100000 && salario->saldoCentavos <= 150000) {
             Participante *novo = malloc(sizeof(Participante));
             if (novo == NULL) {
@@ -66,7 +66,7 @@ Participante *selecionarParticipantes(Banco *banco) {
                 banco->ultimoResultado = ERRO_MEMORIA;
                 return NULL;
             }
-            novo->cliente = clienteAtual;
+            novo->cliente = cliente;
             novo->conta = salario;
             novo->proximo = NULL;
             /* Inserção ordenada: maior saldo primeiro; empate pelo menor número. */
@@ -96,12 +96,12 @@ Participante *selecionarParticipantes(Banco *banco) {
                 ultimo->proximo = NULL;
             }
         }
-        clienteAtual = clienteAtual->proximo;
     }
     banco->ultimoResultado = BANCO_OK;
     return inicio;
 }
 
+// realiza o sorteio via fibonacci entre os 5 participantes e credita 10x o saldo
 Premiacao *realizarSorteio(Banco *banco) {
     if (banco == NULL) {
         return NULL;
@@ -111,10 +111,8 @@ Premiacao *realizarSorteio(Banco *banco) {
         return NULL;
     }
     int quantidade = 0;
-    Participante *participante = lista;
-    while (participante != NULL) {
+    for (Participante *participante = lista; participante != NULL; participante = participante->proximo) {
         quantidade++;
-        participante = participante->proximo;
     }
     if (quantidade != 5) {
         liberarParticipantes(lista);
@@ -123,14 +121,9 @@ Premiacao *realizarSorteio(Banco *banco) {
     }
     int indice = -1;
     Resultado resultado = escolherPorFibonacci(lista, quantidade, &indice);
-    if (resultado != BANCO_OK) {
+    if (resultado != BANCO_OK || indice < 0 || indice >= quantidade) {
         liberarParticipantes(lista);
-        banco->ultimoResultado = resultado;
-        return NULL;
-    }
-    if (indice < 0 || indice >= quantidade) {
-        liberarParticipantes(lista);
-        banco->ultimoResultado = ERRO_ARGUMENTO_INVALIDO;
+        banco->ultimoResultado = (resultado != BANCO_OK) ? resultado : ERRO_ARGUMENTO_INVALIDO;
         return NULL;
     }
     Participante *vencedor = lista;
