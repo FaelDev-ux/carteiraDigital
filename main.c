@@ -208,6 +208,35 @@ static void mostrarHistoricoBanco(Banco* banco) {
   }
 }
 
+static void mostrarSorteio(Banco* banco) {
+  Participante* lista = selecionarParticipantes(banco);
+  if (banco->ultimoResultado != BANCO_OK) {
+    puts(mensagemResultado(banco->ultimoResultado));
+    return;
+  }
+
+  limparTerminal();
+  puts("=== Participantes do sorteio ===");
+  if (lista == NULL) {
+    puts("Nenhum participante elegível.");
+  }
+  for (const Participante* participante = lista; participante != NULL; participante = participante->proximo) {
+    const Conta* conta = participante->conta;
+    mostrarLinhaCliente(participante->cliente, conta, conta->saldoCentavos);
+  }
+
+  liberarParticipantes(lista);
+
+  const Premiacao* premio = realizarSorteio(banco);
+  if (premio == NULL) {
+    puts(mensagemResultado(banco->ultimoResultado));
+    return;
+  }
+
+  puts("\n=== Vencedor e prêmio ===");
+  mostrarLinhaCliente(premio->cliente, premio->conta, premio->valorCentavos);
+}
+
 static void mostrarExtrato(Banco* banco, const char* numero) {
   const Movimentacao* movimento = consultarExtrato(banco, numero);
   if (banco->ultimoResultado != BANCO_OK) {
@@ -363,7 +392,7 @@ int main(void) {
       mostrarHistoricoBanco(banco);
       break;
     case '3':
-      puts("Sorteio em breve.");
+      mostrarSorteio(banco);
       break;
     case '4':
       cadastrar(banco);
