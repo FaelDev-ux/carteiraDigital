@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -101,40 +102,94 @@ static void cadastrar(Banco* banco) {
   }
 }
 
-static void acessarConta(Banco* banco) {
+static int lerValor(long long* centavos) {
+  char texto[64];
+  puts("Digite o valor no formato (10,50):");
+  if (fgets(texto, sizeof texto, stdin) == NULL) {
+    return 0;
+  }
+  if (strchr(texto, '\n') == NULL && !feof(stdin)) {
+    descartarRestoDaLinha();
+    return 0;
+  }
+
+  char inteira[18], decimal[3], resto = '\n';
+  int lidos = sscanf(texto, "%17[0-9],%2[0-9]%c", inteira, decimal, &resto); //passando texto e dividindo em 3 partes
+  if (lidos < 2 || decimal[1] == '\0' || resto != '\n') {
+    return 0;
+  }
+
+  long long reais = atoll(inteira); //converte string para long long
+  int fracao = atoi(decimal); //converte string para int
+  if (reais > (LLONG_MAX - fracao) / 100) { //evita estouro no long lng
+    return 0;
+  }
+
+  *centavos = reais * 100 + fracao;
+  return *centavos > 0; //retorna se foi positivo ou negativo
+}
+
+static int acessarConta(Banco* banco) {
   if (!banco->aberto) {
     puts("Abra o banco para acessar uma conta.");
-    return;
+    return 0;
   }
 
   char numero[32];
   puts("Digite o número completo da conta (ex.: 1000-01):");
   if (scanf(" %31s", numero) != 1) {
-    return;
+    return 0;
   }
   descartarRestoDaLinha();
 
   const Conta* conta = buscarConta(banco, numero);
   if (conta == NULL) {
-    puts(mensagemResultado(banco->ultimoResultado));
-    return;
+    puts(mensagemResultado(ERRO_CONTA_NAO_ENCONTRADA));
+    return 0;
   }
 
   const Cliente* titular = buscarTitular(banco, conta);
   if (titular == NULL) {
     puts("Titular não encontrado.");
-    return;
+    return 0;
   }
 
   limparTerminal();
   printf("Conta %04d-%02d\n", conta->numeroBase, (int)conta->tipo);
   printf("Cliente: %s%s", titular->nome, strchr(titular->nome, '\n') ? "" : "\n");
 
-  long long saldo = conta->saldoCentavos;
-  printf("Saldo: R$ %s%lld,%02lld\n", saldo < 0 ? "-" : "", llabs(saldo / 100), llabs(saldo % 100));
-  if (clienteComCorrenteNegativa(titular)) {
-    puts("Atenção: sua conta corrente está com saldo negativo.");
+  while (!feof(stdin)) {
+    long long saldo = conta->saldoCentavos;
+    printf("\nSaldo: R$ %s%lld,%02lld\n", saldo < 0 ? "-" : "", llabs(saldo / 100), llabs(saldo % 100));
+    if (clienteComCorrenteNegativa(titular)) {
+      puts("Atenção: sua conta corrente está com saldo negativo.");
+    }
+    puts("1 - Depositar\n2 - Sacar\n0 - Voltar");
+
+    char opcao;
+    if (scanf(" %c", &opcao) != 1) {
+      break;
+    }
+    descartarRestoDaLinha();
+    if (opcao == '0') {
+      break;
+    }
+    if (opcao != '1' && opcao != '2') {
+      puts("Opção inválida.");
+      continue;
+    }
+
+    long long valor;
+    if (!lerValor(&valor)) {
+      puts("Informe um valor positivo no formato 10,50.");
+      continue;
+    }
+
+    Resultado resultado = opcao == '1' ? depositar(banco, numero, valor)
+      : sacar(banco, numero, valor);
+    puts(mensagemResultado(resultado));
   }
+  return 1;
 }
 
 int main(void) {
@@ -196,7 +251,9 @@ int main(void) {
       break;
     }
     case '6':
-      acessarConta(banco);
+      if (acessarConta(banco)) {
+        continue;
+      }
       break;
     default:
       puts("Opção inválida. Digite um número de 1 a 6 ou s.");
