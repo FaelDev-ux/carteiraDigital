@@ -3,27 +3,27 @@
 #include <string.h>
 #include "meu_banco.h"
 
+// cadastra um novo cliente, valida nome e persiste no banco de dados
 Cliente *cadastrarCliente(Banco *banco, const char *nome) {
     if (banco == NULL) {
         return NULL;
     }
     banco->ultimoResultado = ERRO_ARGUMENTO_INVALIDO;
-    if (nome == NULL || nome[0] == '\0') {
+    if (nome == NULL || *nome == '\0') {
         return NULL;
     }
-    /* Não confundimos texto composto só de espaços com nome preenchido. */
-    size_t posicao = 0;
-    while (nome[posicao] != '\0' && ehEspaco(nome[posicao]) == 1) {
-        posicao++;
+    const char *caractere = nome;
+    while (*caractere != '\0' && ehEspaco(*caractere)) {
+        caractere++;
     }
-    if (nome[posicao] == '\0') {
+    if (*caractere == '\0') {
         return NULL;
     }
     if (banco->proximoIdCliente == INT_MAX || banco->quantidadeClientes == INT_MAX) {
         banco->ultimoResultado = ERRO_LIMITE_NUMERICO;
         return NULL;
     }
-    Cliente *novoCliente = malloc(sizeof(Cliente));
+    Cliente *novoCliente = calloc(1, sizeof(Cliente));
     if (novoCliente == NULL) {
         banco->ultimoResultado = ERRO_MEMORIA;
         return NULL;
@@ -35,17 +35,12 @@ Cliente *cadastrarCliente(Banco *banco, const char *nome) {
         return NULL;
     }
     strcpy(novoCliente->nome, nome);
-    novoCliente->id = banco->proximoIdCliente;
-    novoCliente->possuiEmprestimo = 0;
-    novoCliente->possuiTitulo = 0;
-    novoCliente->contas = NULL;
+    novoCliente->id = banco->proximoIdCliente++;
     novoCliente->proximo = banco->clientes;
     banco->clientes = novoCliente;
     banco->quantidadeClientes++;
-    banco->proximoIdCliente++;
     Resultado resultado = salvarBanco(banco);
     if (resultado != BANCO_OK) {
-        /* A transação falhou: desfazemos a inclusão também na memória. */
         banco->clientes = novoCliente->proximo;
         banco->quantidadeClientes--;
         banco->proximoIdCliente--;
@@ -57,56 +52,49 @@ Cliente *cadastrarCliente(Banco *banco, const char *nome) {
     return novoCliente;
 }
 
+// busca um cliente pelo id
 Cliente *buscarCliente(Banco *banco, int id) {
     if (banco == NULL || id <= 0) {
         return NULL;
     }
-    Cliente *clienteAtual = banco->clientes;
-    while (clienteAtual != NULL) {
-        if (clienteAtual->id == id) {
-            return clienteAtual;
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        if (cliente->id == id) {
+            return cliente;
         }
-        clienteAtual = clienteAtual->proximo;
     }
     return NULL;
 }
 
+// acha o cliente dono de uma conta
 Cliente *buscarTitular(Banco *banco, const Conta *conta) {
     if (banco == NULL || conta == NULL) {
         return NULL;
     }
-    Cliente *clienteAtual = banco->clientes;
-    while (clienteAtual != NULL) {
-        Conta *contaAtual = clienteAtual->contas;
-        while (contaAtual != NULL) {
-            if (contaAtual == conta) {
-                return clienteAtual;
+    for (Cliente *cliente = banco->clientes; cliente != NULL; cliente = cliente->proximo) {
+        for (Conta *contaItem = cliente->contas; contaItem != NULL; contaItem = contaItem->proximo) {
+            if (contaItem == conta) {
+                return cliente;
             }
-            contaAtual = contaAtual->proximo;
         }
-        clienteAtual = clienteAtual->proximo;
     }
     return NULL;
 }
 
+// retorna a conta de um tipo específico do cliente (corrente, salario ou poupanca)
 Conta *contaDoTipo(const Cliente *cliente, TipoConta tipo) {
     if (cliente == NULL) {
         return NULL;
     }
-    Conta *contaAtual = cliente->contas;
-    while (contaAtual != NULL) {
-        if (contaAtual->tipo == tipo) {
-            return contaAtual;
+    for (Conta *conta = cliente->contas; conta != NULL; conta = conta->proximo) {
+        if (conta->tipo == tipo) {
+            return conta;
         }
-        contaAtual = contaAtual->proximo;
     }
     return NULL;
 }
 
+// checa se o cliente está com a conta corrente com saldo negativo
 int clienteComCorrenteNegativa(const Cliente *cliente) {
     Conta *corrente = contaDoTipo(cliente, CORRENTE);
-    if (corrente != NULL && corrente->saldoCentavos < 0) {
-        return 1;
-    }
-    return 0;
+    return (corrente != NULL && corrente->saldoCentavos < 0);
 }
