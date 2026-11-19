@@ -190,7 +190,8 @@ static int acessarConta(Banco* banco) {
     if (clienteComCorrenteNegativa(titular)) {
       puts("Atenção: sua conta corrente está com saldo negativo.");
     }
-    puts("1 - Depositar\n2 - Sacar\n5 - Extrato\n0 - Voltar");
+    puts("1 - Depositar\n2 - Sacar\n3 - Solicitar empréstimo\n"
+      "4 - Adquirir título\n5 - Extrato\n0 - Voltar");
 
     char opcao;
     if (scanf(" %c", &opcao) != 1) {
@@ -204,9 +205,27 @@ static int acessarConta(Banco* banco) {
       mostrarExtrato(banco, numero);
       continue;
     }
-    if (opcao != '1' && opcao != '2') {
+    if (opcao == '4') {
+      puts(mensagemResultado(adquirirTitulo(banco, numero)));
+      continue;
+    }
+    if (opcao < '1' || opcao > '3') {
       puts("Opção inválida.");
       continue;
+    }
+
+    if (opcao == '3') {
+      long long limite;
+      Resultado consulta = conta->tipo == CORRENTE
+        ? consultarLimiteEmprestimo(banco, titular->id, &limite)
+        : ERRO_EMPRESTIMO_NAO_PERMITIDO;
+      if (consulta != BANCO_OK) {
+        puts(mensagemResultado(consulta));
+        continue;
+      }
+      printf("Limite disponível: ");
+      exibirDinheiro(limite);
+      putchar('\n');
     }
 
     long long valor;
@@ -215,8 +234,16 @@ static int acessarConta(Banco* banco) {
       continue;
     }
 
-    Resultado resultado = opcao == '1' ? depositar(banco, numero, valor)
-      : sacar(banco, numero, valor);
+    Resultado resultado;
+    if (opcao == '1') {
+      resultado = depositar(banco, numero, valor);
+    }
+    else if (opcao == '2') {
+      resultado = sacar(banco, numero, valor);
+    }
+    else {
+      resultado = solicitarEmprestimo(banco, numero, valor);
+    }
     puts(mensagemResultado(resultado));
   }
   return 1;
